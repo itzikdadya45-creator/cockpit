@@ -608,7 +608,7 @@ body.real .stage .qr{width:min(34vh,240px)}
       </div>
       <div class="ipad"><div class="stage" id="stage"><div class="lyr" id="slyr"></div><div class="waiting" id="waiting"><div class="qrwrap"><b>מסך במה</b><span id="stagewait">ממתין לשלט</span><div class="qr" id="qrbox"></div><span style="font-size:13px">סרוק עם כל טלפון – הוא יהפוך לשלט ויתחבר למסך הזה</span></div></div><div class="off"></div></div></div>
       <div id="camov" style="display:none;position:fixed;inset:0;z-index:300;background:#000">
-        <video id="camvid" playsinline muted autoplay style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"></video>
+        <video id="camvid" playsinline webkit-playsinline muted autoplay style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"></video>
         <div style="position:absolute;left:50%;top:45%;width:min(68vw,300px);aspect-ratio:1;transform:translate(-50%,-50%);border:3px solid rgba(255,255,255,.9);border-radius:28px;box-shadow:0 0 0 9999px rgba(0,0,0,.45)"></div>
         <div id="camtip" style="position:absolute;left:0;right:0;top:calc(env(safe-area-inset-top) + 40px);text-align:center;color:#fff;font:600 18px Heebo,sans-serif">כוון את המצלמה ל־QR שעל מסך הבמה</div>
         <button class="glass press" id="camclose" style="position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 40px);transform:translateX(-50%);height:52px;padding:0 30px;border-radius:26px;font:700 16px Heebo,sans-serif;color:#fff">ביטול</button>
@@ -1451,7 +1451,7 @@ async function openCam(){
   $('camov').style.display='block';$('camtip').textContent='כוון את המצלמה ל־QR שעל מסך הבמה';
   try{camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false})}
   catch(e){stopCam();toast('צריך לאשר גישה למצלמה');return}
-  const v=$('camvid');v.srcObject=camStream;try{await v.play()}catch(e){}
+  const v=$('camvid');v.muted=true;v.setAttribute('playsinline','');v.srcObject=camStream;try{await v.play()}catch(e){}
   camDet=null;
   if('BarcodeDetector' in window){try{camDet=new BarcodeDetector({formats:['qr_code']})}catch(e){camDet=null}}
   if(!camDet){try{await loadJsQR()}catch(e){stopCam();toast('אין חיבור לאינטרנט');return}}
@@ -1467,6 +1467,7 @@ async function openCam(){
         else $('camtip').textContent='זה לא QR של COCKPIT'}
     }catch(e){}busy=false},220);
 }
+document.body.appendChild($('camov'));
 $('camscan').onclick=openCam;$('camscan2').onclick=openCam;$('camclose').onclick=stopCam;
 
 /* open from a scanned QR: #join-<code> */
