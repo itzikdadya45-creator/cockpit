@@ -354,6 +354,7 @@ body.real .stage .qr{width:min(34vh,240px)}
             <p>מה המכשיר הזה יהיה?</p>
             <button class="rolecard glass press" id="role-remote"><span class="ic" style="color:var(--cyan)">📱</span><div><b>שלט</b><span>חיפוש, עריכה ושליטה בהופעה</span></div></button>
             <button class="rolecard glass press" id="role-stage"><span class="ic" style="color:var(--purple2)">▭</span><div><b>מסך במה</b><span>מציג לזמר רק את המילים</span></div></button>
+            <button class="wide prom glass press" id="camscan" style="border-radius:26px;width:auto;padding:0 26px">📷 סרוק QR של מסך במה</button>
             <button class="wide glass press" id="scanbtn" style="border-radius:26px;width:auto;padding:0 22px">⌗ יש לי קוד של מסך במה</button>
             <p style="font-size:12px;color:var(--faint);text-align:center">המסך שמציג QR הוא מסך הבמה · הטלפון שסורק אותו במצלמה הופך לשלט</p>
           </div>
@@ -561,7 +562,7 @@ body.real .stage .qr{width:min(34vh,240px)}
             <div class="sheetpad">
               <div class="small" style="margin:4px 2px 8px">כדי להתחבר: סרוק עם מצלמת הטלפון את ה־QR שעל מסך הבמה. אפשר גם להקליד את הקוד שמופיע מתחתיו:</div>
               <div class="newfolder"><input class="glassin" id="joincode" placeholder="קוד המסך" autocomplete="off" autocapitalize="off" dir="ltr"><button class="glass press" id="joinbtn">התחבר</button></div>
-              <button class="wide prom glass press" id="scanbtn2" style="display:none">⌗</button>
+              <button class="wide prom glass press" id="camscan2" style="margin-top:10px">📷 סרוק QR במצלמה</button>
               <div class="secthdr">מסך במה (אייפד / אייפון)</div>
               <div class="card glass">
                 <div class="row2"><span style="font-size:22px">▭</span><div style="flex:1"><b>מסך במה</b><div class="small" id="connstate"></div></div><button class="circ glass press" id="connbtn" style="width:auto;padding:0 14px;font-size:13px;color:var(--cyan)"></button></div>
@@ -606,6 +607,12 @@ body.real .stage .qr{width:min(34vh,240px)}
         </div>
       </div>
       <div class="ipad"><div class="stage" id="stage"><div class="lyr" id="slyr"></div><div class="waiting" id="waiting"><div class="qrwrap"><b>מסך במה</b><span id="stagewait">ממתין לשלט</span><div class="qr" id="qrbox"></div><span style="font-size:13px">סרוק עם כל טלפון – הוא יהפוך לשלט ויתחבר למסך הזה</span></div></div><div class="off"></div></div></div>
+      <div id="camov" style="display:none;position:fixed;inset:0;z-index:300;background:#000">
+        <video id="camvid" playsinline muted autoplay style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"></video>
+        <div style="position:absolute;left:50%;top:45%;width:min(68vw,300px);aspect-ratio:1;transform:translate(-50%,-50%);border:3px solid rgba(255,255,255,.9);border-radius:28px;box-shadow:0 0 0 9999px rgba(0,0,0,.45)"></div>
+        <div id="camtip" style="position:absolute;left:0;right:0;top:calc(env(safe-area-inset-top) + 40px);text-align:center;color:#fff;font:600 18px Heebo,sans-serif">כוון את המצלמה ל־QR שעל מסך הבמה</div>
+        <button class="glass press" id="camclose" style="position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 40px);transform:translateX(-50%);height:52px;padding:0 30px;border-radius:26px;font:700 16px Heebo,sans-serif;color:#fff">ביטול</button>
+      </div>
       <div class="stageexit" id="stageexit"><button class="glass press" id="stageleave">יציאה ממסך במה</button><button class="glass press" id="stageclose">סגור</button></div>
       <div class="legend">
         <span><i class="dot" style="background:var(--verse)"></i>בית</span>
@@ -986,7 +993,7 @@ function startScan(){
       if(isLive())syncStage();buildStage()},800)
   },1500);
 }
-$('scanbtn').onclick=startScan;$('scanbtn2').onclick=startScan;
+$('scanbtn').onclick=startScan;
 $('scancancel').onclick=()=>{clearTimeout($('scanner')._t);$('scanner').classList.remove('on')};
 /* without QR: choosing "שלט" finds the stage on the network after a moment */
 $('role-remote').addEventListener('click',()=>{if(!connected)setTimeout(()=>{if(!connected){connected=true;renderPill();$('stagewait').textContent='מחובר לשלט – בחר שיר';toast('נמצא מסך במה ברשת · מחובר')}},1600)});
@@ -1430,6 +1437,37 @@ $('golive').onclick=()=>{
   haptic();liveId=cur.id;stopped=false;syncStage();buildStage();renderSong();toast(connected?'על הבמה: '+cur.title:'מוכן – יוצג כשמסך הבמה יתחבר');
 };
 setText=(function(orig){return function(f){orig(f);broadcast(false)}})(setText);
+
+/* ---------- in-app QR camera ---------- */
+let camStream=null,camLoop=null,camDet=null;
+function loadJsQR(){return new Promise((res,rej)=>{if(window.jsQR)return res();const sc=document.createElement('script');
+  sc.src='https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js';sc.onload=res;sc.onerror=rej;document.head.appendChild(sc)})}
+function codeFromText(t){t=(t||'').trim();let m=t.match(/#join-([a-z0-9]{4,12})/i);if(m)return m[1].toLowerCase();
+  m=t.match(/^[a-z0-9]{4,12}$/i);return m?t.toLowerCase():null}
+function stopCam(){clearInterval(camLoop);camLoop=null;if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null}$('camov').style.display='none'}
+async function openCam(){
+  haptic();$('connsheet').classList.remove('on');
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){toast('אין גישה למצלמה בדפדפן הזה – השתמש בקוד');return}
+  $('camov').style.display='block';$('camtip').textContent='כוון את המצלמה ל־QR שעל מסך הבמה';
+  try{camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false})}
+  catch(e){stopCam();toast('צריך לאשר גישה למצלמה');return}
+  const v=$('camvid');v.srcObject=camStream;try{await v.play()}catch(e){}
+  camDet=null;
+  if('BarcodeDetector' in window){try{camDet=new BarcodeDetector({formats:['qr_code']})}catch(e){camDet=null}}
+  if(!camDet){try{await loadJsQR()}catch(e){stopCam();toast('אין חיבור לאינטרנט');return}}
+  const cv=document.createElement('canvas'),cx=cv.getContext('2d',{willReadFrequently:true});let busy=false;
+  camLoop=setInterval(async()=>{
+    if(busy||!camStream||v.readyState<2)return;busy=true;
+    try{let txt=null;
+      if(camDet){const r=await camDet.detect(v);if(r&&r[0])txt=r[0].rawValue}
+      else{const w=v.videoWidth,h=v.videoHeight,k=Math.min(1,640/Math.max(w,h));cv.width=w*k|0;cv.height=h*k|0;
+        cx.drawImage(v,0,0,cv.width,cv.height);const r=jsQR(cx.getImageData(0,0,cv.width,cv.height).data,cv.width,cv.height,{inversionAttempts:'dontInvert'});if(r)txt=r.data}
+      if(txt){const c=codeFromText(txt);
+        if(c){stopCam();if(navigator.vibrate)navigator.vibrate(60);startRemote(c);toast('מתחבר למסך '+c+'…')}
+        else $('camtip').textContent='זה לא QR של COCKPIT'}
+    }catch(e){}busy=false},220);
+}
+$('camscan').onclick=openCam;$('camscan2').onclick=openCam;$('camclose').onclick=stopCam;
 
 /* open from a scanned QR: #join-<code> */
 (function(){const m=(location.hash||'').match(/^#join-([a-z0-9]{4,12})$/);
