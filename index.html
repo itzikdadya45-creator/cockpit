@@ -269,6 +269,18 @@ textarea.paste{width:100%;min-height:150px;border-radius:16px;padding:12px;color
 .pick .t{font-weight:600}.pick .a{font-size:12px;color:var(--dim)}
 
 .row .del{margin-inline-start:8px;width:32px;height:32px;border-radius:16px;display:grid;place-items:center;font-size:13px;color:var(--faint);flex:none}
+.chips{overflow-x:auto;scrollbar-width:none;padding-bottom:2px}.chips::-webkit-scrollbar{display:none}.chips .chip{flex:none;white-space:nowrap}
+.row .fav,.row .ren{width:32px;height:32px;border-radius:16px;display:grid;place-items:center;font-size:16px;color:var(--faint);flex:none}
+.row .fav.on,#favbtn.on{color:#FFD60A}
+.songtitle{cursor:pointer}
+.songtitle .t::after{content:" ✎";font-size:13px;color:var(--faint);font-weight:400}
+#renov{display:none;position:fixed;inset:0;z-index:250;background:rgba(0,0,0,.55);align-items:center;justify-content:center;padding:24px}
+#renov.on{display:flex}
+#renov .box{width:min(420px,100%);border-radius:24px;padding:20px;display:flex;flex-direction:column;gap:10px}
+#renov h3{margin:0 0 4px;font-size:18px}
+#renov input{height:48px;font-size:17px}
+#renov .rowbtns{display:flex;gap:10px;margin-top:6px}
+#renov .rowbtns button{flex:1;height:48px;border-radius:24px;font-weight:700;font-size:16px}
 .row .del.confirm{width:auto;padding:0 10px;color:#FF453A;font-weight:700;background:rgba(255,69,58,.12)}
 .chips .addsong{margin-inline-start:auto;color:var(--cyan);font-weight:700}
 .delsong{color:#FF453A !important;margin-top:18px}
@@ -387,6 +399,7 @@ body.real .stage .qr{width:min(34vh,240px)}
               <button class="chip glass on" data-l="all">הכול</button>
               <button class="chip glass" data-l="he">עברית</button>
               <button class="chip glass" data-l="en">English</button>
+              <button class="chip glass" data-l="fav">★ מועדפים</button>
               <button class="chip glass press addsong" id="addsong2">＋ שיר חדש</button>
             </div>
           </div>
@@ -438,6 +451,7 @@ body.real .stage .qr{width:min(34vh,240px)}
             </button>
             <svg class="mark sm" width="20" height="20" viewBox="0 0 100 100"></svg>
             <div class="songtitle"><div class="t" id="st"></div><div class="a" id="sa"></div></div>
+            <button class="circ glass press" id="favbtn" title="מועדף" style="font-size:17px">☆</button>
             <button class="circ glass press" id="tofolderbtn" title="הוסף לתיקייה" style="font-size:15px">📁</button>
             <div class="pill glass" id="pill"><span class="dot"></span><span></span></div>
           </div>
@@ -607,11 +621,18 @@ body.real .stage .qr{width:min(34vh,240px)}
         </div>
       </div>
       <div class="ipad"><div class="stage" id="stage"><div class="lyr" id="slyr"></div><div class="waiting" id="waiting"><div class="qrwrap"><b>מסך במה</b><span id="stagewait">ממתין לשלט</span><div class="qr" id="qrbox"></div><span style="font-size:13px">סרוק עם כל טלפון – הוא יהפוך לשלט ויתחבר למסך הזה</span></div></div><div class="off"></div></div></div>
+      <div id="renov"><div class="box glass">
+        <h3>שינוי שם השיר</h3>
+        <input class="glassin" id="rentitle" placeholder="שם השיר">
+        <input class="glassin" id="renartist" placeholder="אמן">
+        <div class="rowbtns"><button class="glass press prom" id="rensave">שמור</button><button class="glass press" id="rencancel">ביטול</button></div>
+      </div></div>
       <div id="camov" style="display:none;position:fixed;inset:0;z-index:300;background:#000">
-        <video id="camvid" playsinline webkit-playsinline muted autoplay style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"></video>
-        <div style="position:absolute;left:50%;top:45%;width:min(68vw,300px);aspect-ratio:1;transform:translate(-50%,-50%);border:3px solid rgba(255,255,255,.9);border-radius:28px;box-shadow:0 0 0 9999px rgba(0,0,0,.45)"></div>
-        <div id="camtip" style="position:absolute;left:0;right:0;top:calc(env(safe-area-inset-top) + 40px);text-align:center;color:#fff;font:600 18px Heebo,sans-serif">כוון את המצלמה ל־QR שעל מסך הבמה</div>
-        <button class="glass press" id="camclose" style="position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 40px);transform:translateX(-50%);height:52px;padding:0 30px;border-radius:26px;font:700 16px Heebo,sans-serif;color:#fff">ביטול</button>
+        <canvas id="campv" style="position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none"></canvas>
+        <video id="camvid" playsinline webkit-playsinline muted autoplay style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;background:#000"></video>
+        <div style="position:absolute;left:50%;top:45%;width:min(68vw,300px);aspect-ratio:1;z-index:2;transform:translate(-50%,-50%);border:3px solid rgba(255,255,255,.95);border-radius:28px;pointer-events:none"></div>
+        <div id="camtip" style="z-index:3;text-shadow:0 1px 6px #000;position:absolute;left:0;right:0;top:calc(env(safe-area-inset-top) + 40px);text-align:center;color:#fff;font:600 18px Heebo,sans-serif">כוון את המצלמה ל־QR שעל מסך הבמה</div>
+        <button class="glass press" id="camclose" style="z-index:3;background:rgba(0,0,0,.55);position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 40px);transform:translateX(-50%);height:52px;padding:0 30px;border-radius:26px;font:700 16px Heebo,sans-serif;color:#fff">ביטול</button>
       </div>
       <div class="stageexit" id="stageexit"><button class="glass press" id="stageleave">יציאה ממסך במה</button><button class="glass press" id="stageclose">סגור</button></div>
       <div class="legend">
@@ -748,14 +769,22 @@ $('lang').onclick=e=>{const b=e.target.closest('button');if(!b||!b.dataset.l)ret
 $('q').oninput=renderList;
 function renderList(){
   const q=$('q').value.trim().toLowerCase();const toks=q.split(/\s+/).filter(Boolean);
-  let list=songs.filter(s=>tab==='all'||s.mine).filter(s=>lang==='all'||s.lang===lang)
+  let list=songs.filter(s=>tab==='all'||s.mine).filter(s=>lang==='all'||(lang==='fav'?s.fav:s.lang===lang))
     .filter(s=>toks.every(t=>(s.title+' '+s.artist).toLowerCase().includes(t)));
   const el=$('songlist');el.innerHTML='';
   list.forEach(s=>{
     const r=document.createElement('div');r.className='row';
-    r.innerHTML=`<div><div class="t"></div><div class="a"></div></div><div class="bars">${s.sections.slice(0,8).map(x=>`<i style="background:${K[x.kind].hex};opacity:.85"></i>`).join('')}</div><button class="del glass" title="מחק שיר">🗑</button>`;
+    r.innerHTML=`<div><div class="t"></div><div class="a"></div></div><div class="bars">${s.sections.slice(0,8).map(x=>`<i style="background:${K[x.kind].hex};opacity:.85"></i>`).join('')}</div><button class="fav glass${s.fav?' on':''}" title="מועדף">${s.fav?'★':'☆'}</button><button class="ren glass" title="שנה שם">✎</button><button class="del glass" title="מחק שיר">🗑</button>`;
     r.querySelector('.t').textContent=s.title;r.querySelector('.a').textContent=s.artist+(s.mine?'':' · יתווסף לספרייה');
+    /* hold a song in the list for 0.6 s → rename */
+    {let lp=null,held=false;
+     r.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;held=false;lp=setTimeout(()=>{held=true;haptic();openRename(s)},600)});
+     ['pointerup','pointerleave','pointercancel','pointermove'].forEach(ev=>r.addEventListener(ev,e=>{if(ev==='pointermove'&&Math.abs(e.movementY||0)<4)return;clearTimeout(lp)}));
+     r.addEventListener('click',e=>{if(held){e.stopImmediatePropagation();e.preventDefault();held=false}},true);
+     r.addEventListener('contextmenu',e=>e.preventDefault());}
     r.onclick=e=>{
+      if(e.target.closest('.fav')){toggleFav(s);return}
+      if(e.target.closest('.ren')){openRename(s);return}
       const d=e.target.closest('.del');
       if(d){ // two taps to delete
         if(d.classList.contains('confirm')){deleteSong(s.id)}
@@ -764,6 +793,7 @@ function renderList(){
       haptic();if(!s.mine){s.mine=true;toast('נוסף לספרייה שלי')}openSong(s,null)};
     el.appendChild(r);
   });
+  if(lang==='fav'&&!list.length)el.insertAdjacentHTML('beforeend','<div class="note">אין עדיין מועדפים. לחץ על ☆ ליד שיר כדי להוסיף.</div>');
   const box=document.createElement('div');box.id='aibox';el.appendChild(box);
   if(q&&tab==='all'){
     aiSchedule($('q').value.trim(),res=>{
@@ -773,12 +803,34 @@ function renderList(){
       if(res==='loading'){b.insertAdjacentHTML('beforeend','<div class="aiwait"><i></i>ה־AI מחפש את השיר…</div>');return}
       if(res.error){b.insertAdjacentHTML('beforeend','<div class="note">'+res.error+'</div>');return}
       const hits=res.list.filter(c=>lang==='all'||c.lang===lang).filter(c=>!songs.some(s=>s.title===c.title&&s.artist===c.artist));
+      if(lang==='fav'){b.innerHTML='';return}
       if(!hits.length){b.insertAdjacentHTML('beforeend','<div class="note">לא נמצא שיר מתאים. נסה שם אמן, או שורה שאתה זוכר מהשיר.</div>');return}
       hits.forEach(c=>b.appendChild(aiRow(c,openOnline)));
       b.insertAdjacentHTML('beforeend','<div class="small" style="padding:4px 6px">ה־AI מזהה שם שיר ואמן בלבד. כדאי לוודא שזה השיר הנכון.</div>');
     });
   }
 }
+
+/* ===== favorites & rename ===== */
+function toggleFav(s){haptic();s.fav=!s.fav;if(s.fav&&!s.mine)s.mine=true;toast(s.fav?'נוסף למועדפים ★':'הוסר מהמועדפים');renderList();renderFavBtn()}
+function renderFavBtn(){const b=$('favbtn');if(!b||!cur)return;const s=songById(cur.id)||cur;b.textContent=s.fav?'★':'☆';b.classList.toggle('on',!!s.fav)}
+let renTarget=null;
+function openRename(s){renTarget=s;$('rentitle').value=s.title||'';$('renartist').value=s.artist||'';$('renov').classList.add('on');setTimeout(()=>{$('rentitle').focus();$('rentitle').select()},60)}
+function closeRename(){$('renov').classList.remove('on');renTarget=null}
+document.body.appendChild($('renov'));
+$('rencancel').onclick=closeRename;
+$('renov').onclick=e=>{if(e.target.id==='renov')closeRename()};
+$('rentitle').onkeydown=$('renartist').onkeydown=e=>{if(e.key==='Enter')$('rensave').click()};
+$('rensave').onclick=()=>{
+  const s=renTarget;if(!s)return;const t=$('rentitle').value.trim();
+  if(!t){toast('צריך שם לשיר');return}
+  s.title=t;s.artist=$('renartist').value.trim();
+  if(cur&&cur.id===s.id){cur.title=s.title;cur.artist=s.artist;$('st').textContent=s.title;$('sa').textContent=s.artist}
+  if(stage&&stage.song&&liveId===s.id){stage.song.title=s.title;stage.song.artist=s.artist}
+  closeRename();haptic();toast('השם עודכן ✓');renderList();if(typeof renderFolders==='function')renderFolders();
+};
+$('favbtn').onclick=()=>{if(!cur)return;const s=songById(cur.id);if(s){toggleFav(s);cur.fav=s.fav}};
+document.querySelector('.songtitle').onclick=()=>{if(!cur)return;openRename(songById(cur.id)||cur)};
 
 /* ===== shows ===== */
 /* ===== add / delete songs ===== */
@@ -862,7 +914,7 @@ function openSong(song,idx){
   cur=song;showIdx=idx;auto=null;
   if(song.id===liveId&&stage){base=stagePos();auto=stage.speed;baseT=now()}else{base=0;baseT=now()}
   $('st').textContent=song.title;$('sa').textContent=song.artist;
-  showView('song');
+  showView('song');setTimeout(renderFavBtn,0);
   requestAnimationFrame(()=>{buildLyrics($('plyr'),cur,false);renderSong()});
 }
 $('back').onclick=()=>{haptic();if(isLive())syncStage();auto=null;showView(showIdx!=null?'shows':'songs');if(showIdx!=null)renderShow()};
@@ -1456,6 +1508,14 @@ async function openCam(){
   if('BarcodeDetector' in window){try{camDet=new BarcodeDetector({formats:['qr_code']})}catch(e){camDet=null}}
   if(!camDet){try{await loadJsQR()}catch(e){stopCam();toast('אין חיבור לאינטרנט');return}}
   const cv=document.createElement('canvas'),cx=cv.getContext('2d',{willReadFrequently:true});let busy=false;
+  /* live picture: draw the camera into a canvas too (some iPhones keep the video element black) */
+  const pv=$('campv'),px=pv.getContext('2d');
+  const draw=()=>{if(!camStream)return;const W=innerWidth,H=innerHeight,d=Math.min(2,devicePixelRatio||1);
+    if(pv.width!==W*d|0){pv.width=W*d|0;pv.height=H*d|0}
+    const w=v.videoWidth,h=v.videoHeight;
+    if(w&&h){const k=Math.max(pv.width/w,pv.height/h),dw=w*k,dh=h*k;px.drawImage(v,(pv.width-dw)/2,(pv.height-dh)/2,dw,dh)}
+    requestAnimationFrame(draw)};
+  requestAnimationFrame(draw);
   camLoop=setInterval(async()=>{
     if(busy||!camStream||v.readyState<2)return;busy=true;
     try{let txt=null;
