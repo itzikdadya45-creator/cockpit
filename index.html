@@ -1342,6 +1342,7 @@ $('joinbtn').onclick=()=>{const c=$('joincode').value.trim().toLowerCase().repla
   $('connsheet').classList.remove('on');startRemote(c)};
 
 async function startRemote(c){
+  keepAwake();
   leaveRole();role='remote';document.body.classList.remove('stagemode');showView(cur?'song':'songs');
   if(!c){renderPill();toast('סרוק את ה־QR שעל מסך הבמה, או הקלד את הקוד');openSheet('connsheet');return}
   code=c;LS.set('cockpit.join',c);$('joincode').value=c;renderPill();
@@ -1366,7 +1367,11 @@ function leaveRole(){if(T){try{T.close()}catch(e){}}T=null;connected=false;peers
 /* keep the stage screen on */
 let wake=null;
 async function keepAwake(){try{if('wakeLock' in navigator){wake=await navigator.wakeLock.request('screen')}}catch(e){}}
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&role==='stage')keepAwake()});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)return;
+  if(role==='stage'||role==='remote')keepAwake();
+  /* back from the lock screen / another app: rebuild the link if it died meanwhile */
+  if(role==='remote'&&code&&!connected){const c=code;startRemote(c)}});
+window.addEventListener('online',()=>{if(role==='remote'&&code&&!connected){const c=code;startRemote(c)}});
 
 /* ---------- QR ---------- */
 renderQR=function(){
@@ -1394,7 +1399,7 @@ async function waitClaude(ms){const t0=Date.now();while(!window.claude&&Date.now
 async function openTransport(myRole,c){
   const onPeers=(n,joined)=>{peersCount=n;const was=connected;connected=n>0;renderPill();
     if(myRole==='remote'&&connected&&(!was||joined)){broadcast(true);toast('מחובר למסך הבמה')}
-    if(myRole==='remote'&&was&&!connected)toast('החיבור למסך נפל – המילים נשארות על המסך')};
+    if(myRole==='remote'&&was&&!connected){toast('⚠️ החיבור למסך נפל – מתחבר מחדש…');if(navigator.vibrate)navigator.vibrate([80,60,80])}};
   let inFrame=false;try{inFrame=window.self!==window.top}catch(e){inFrame=true}
   const cl=inFrame?await waitClaude(1500):window.claude||null;
   if(cl&&cl.use){
@@ -1417,9 +1422,10 @@ function loadPeerJS(){return new Promise((res,rej)=>{if(window.Peer)return res()
   sc.src='https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';sc.onload=res;sc.onerror=rej;document.head.appendChild(sc)})}
 async function peerTransport(myRole,c,onPeers){
   try{await loadPeerJS()}catch(e){toast('אין חיבור לאינטרנט');return null}
-  const conns=new Set();let peer=null,closed=false,retry=null;
-  const wire=cn=>{cn.on('open',()=>{conns.add(cn);onPeers(conns.size,true)});
-    cn.on('data',d=>onMsg(d));
+  const conns=new Set();let peer=null,closed=false,retry=null,hb=null;
+  const lastHeard=new Map();
+  const wire=cn=>{cn.on('open',()=>{conns.add(cn);lastHeard.set(cn,Date.now());onPeers(conns.size,true)});
+    cn.on('data',d=>{lastHeard.set(cn,Date.now());if(d&&d.t==='ping'){try{cn.send({t:'pong'})}catch(e){}return}if(d&&d.t==='pong')return;onMsg(d)});
     const gone=()=>{if(conns.delete(cn))onPeers(conns.size,false)};cn.on('close',gone);cn.on('error',gone)};
   const id='cockpit-'+c;
   if(myRole==='stage'){
@@ -1430,9 +1436,15 @@ async function peerTransport(myRole,c,onPeers){
     peer=new Peer();
     const dial=()=>{if(closed||conns.size)return;try{wire(peer.connect(id,{reliable:true}))}catch(e){}};
     peer.on('open',dial);peer.on('disconnected',()=>{if(!closed)try{peer.reconnect()}catch(e){}});
-    retry=setInterval(dial,3000);
+    retry=setInterval(dial,2000);
   }
-  return {kind:'webrtc',send:d=>conns.forEach(cn=>{try{cn.send(d)}catch(e){}}),close:()=>{closed=true;clearInterval(retry);try{peer.destroy()}catch(e){}}};
+  /* heartbeat: a link that went quiet for 5 s is treated as dead and re-dialled */
+  hb=setInterval(()=>{const t=Date.now();
+    conns.forEach(cn=>{try{cn.send({t:'ping'})}catch(e){}
+      if(t-(lastHeard.get(cn)||0)>5000){conns.delete(cn);lastHeard.delete(cn);try{cn.close()}catch(e){}onPeers(conns.size,false)}});
+    if(peer&&peer.disconnected&&!peer.destroyed&&!closed){try{peer.reconnect()}catch(e){}}
+  },1000);
+  return {kind:'webrtc',send:d=>conns.forEach(cn=>{try{cn.send(d)}catch(e){}}),close:()=>{closed=true;clearInterval(retry);clearInterval(hb);try{peer.destroy()}catch(e){}}};
 }
 
 /* ---------- protocol ----------
