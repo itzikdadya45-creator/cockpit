@@ -266,6 +266,10 @@ textarea.paste{width:100%;min-height:150px;border-radius:16px;padding:12px;color
 .pick .ck{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--faint);flex:none;display:grid;place-items:center}
 .pick.sel .ck{background:var(--cyan);border-color:var(--cyan)}
 .pick.sel .ck::after{content:"";width:6px;height:10px;border:solid #000;border-width:0 2px 2px 0;transform:rotate(45deg) translate(-1px,-1px)}
+.pick.in{cursor:default;opacity:.55}
+.pick.in .ck{background:#30D158;border-color:#30D158}
+.pick.in .ck::after{content:"";width:6px;height:10px;border:solid #000;border-width:0 2px 2px 0;transform:rotate(45deg) translate(-1px,-1px)}
+.pick .inbadge{margin-inline-start:auto;font-size:12px;font-weight:700;color:#30D158;white-space:nowrap;flex:none}
 .pick .t{font-weight:600}.pick .a{font-size:12px;color:var(--dim)}
 
 .row .del{margin-inline-start:8px;width:32px;height:32px;border-radius:16px;display:grid;place-items:center;font-size:13px;color:var(--faint);flex:none}
@@ -335,6 +339,9 @@ body.real.stagemode .ipad{width:100vw;height:100vh;height:100dvh;aspect-ratio:au
 body.real.stagemode .stage{border-radius:0}
 body.real .stage .qr{width:min(34vh,240px)}
 .stagecode{font:600 15px/1.4 ui-monospace,Menlo,monospace;letter-spacing:.2em;color:#9aa;margin-top:2px}
+#neb{position:absolute;inset:0;width:100%;height:100%;z-index:0;display:none}
+.stage .lyr,.stage .waiting{z-index:1}.stage .off{z-index:2}
+.stage .waiting .qrwrap{background:rgba(0,0,0,.35);border-radius:24px;padding:18px}
 .stageexit{position:fixed;z-index:120;left:50%;bottom:30px;transform:translateX(-50%);display:none;gap:10px}
 .stageexit.on{display:flex}
 .stageexit button{height:46px;padding:0 18px;border-radius:23px;font-weight:700;font-size:14px}
@@ -503,8 +510,8 @@ body.real .stage .qr{width:min(34vh,240px)}
         <!-- Pick songs for a folder -->
         <div class="sheet" id="picksheet">
           <div class="sheetbody glass">
-            <div class="sheethdr"><button data-close="picksheet">ביטול</button><b>הוסף שירים לתיקייה</b><button id="pickok">הוסף</button></div>
-            <div class="sheetpad" id="picklist"></div>
+            <div class="sheethdr"><button data-close="picksheet">ביטול</button><b id="picktitle">הוסף שירים לתיקייה</b><button id="pickok">הוסף</button></div>
+            <div class="sheetpad"><input class="glassin" id="pickq" placeholder="חפש שיר…" autocomplete="off" style="width:100%;margin-bottom:8px"><div id="picklist"></div></div>
           </div>
         </div>
 
@@ -620,7 +627,7 @@ body.real .stage .qr{width:min(34vh,240px)}
           <button class="glass press" id="netbtn">חבר / נתק (סימולציה)</button>
         </div>
       </div>
-      <div class="ipad"><div class="stage" id="stage"><div class="lyr" id="slyr"></div><div class="waiting" id="waiting"><div class="qrwrap"><b>מסך במה</b><span id="stagewait">ממתין לשלט</span><div class="qr" id="qrbox"></div><span style="font-size:13px">סרוק עם כל טלפון – הוא יהפוך לשלט ויתחבר למסך הזה</span></div></div><div class="off"></div></div></div>
+      <div class="ipad"><div class="stage" id="stage"><canvas id="neb"></canvas><div class="lyr" id="slyr"></div><div class="waiting" id="waiting"><div class="qrwrap"><b>מסך במה</b><span id="stagewait">ממתין לשלט</span><div class="qr" id="qrbox"></div><span style="font-size:13px">סרוק עם כל טלפון – הוא יהפוך לשלט ויתחבר למסך הזה</span></div></div><div class="off"></div></div></div>
       <div id="renov"><div class="box glass">
         <h3>שינוי שם השיר</h3>
         <input class="glassin" id="rentitle" placeholder="שם השיר">
@@ -870,20 +877,28 @@ $('showname').onclick=()=>{$('renamerow').style.display='flex';$('renameinput').
 $('renameok').onclick=()=>{show.name=$('renameinput').value.trim()||show.name;$('renamerow').style.display='none';renderShow()};
 $('renameinput').onkeydown=e=>{if(e.key==='Enter')$('renameok').click()};
 let pickSel=new Set();
-$('addsongs').onclick=()=>{pickSel=new Set();renderPick();openSheet('picksheet')};
+$('addsongs').onclick=()=>{pickSel=new Set();$('pickq').value='';$('picktitle').textContent='הוסף ל״'+show.name+'״';renderPick();openSheet('picksheet')};
+$('pickq').oninput=()=>renderPick();
+/* songs already in THIS folder get a green ✓ and can't be picked again (other folders don't matter) */
 function renderPick(){const el=$('picklist');el.innerHTML='';
-  songs.forEach(s=>{const r=document.createElement('div');r.className='pick'+(pickSel.has(s.id)?' sel':'');
-    r.innerHTML='<span class="ck"></span><div><div class="t"></div><div class="a"></div></div>';r.querySelector('.t').textContent=s.title;r.querySelector('.a').textContent=s.artist+(show.ids.includes(s.id)?' · כבר בתיקייה':'');
-    r.onclick=()=>{pickSel.has(s.id)?pickSel.delete(s.id):pickSel.add(s.id);renderPick()};el.appendChild(r)});
+  const toks=$('pickq').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const inFolder=new Set(show.ids);
+  const list=songs.filter(s=>toks.every(t=>((s.title||'')+' '+(s.artist||'')).toLowerCase().includes(t)));
+  list.forEach(s=>{const has=inFolder.has(s.id);const r=document.createElement('div');r.className='pick'+(has?' in':pickSel.has(s.id)?' sel':'');
+    r.innerHTML='<span class="ck"></span><div style="min-width:0"><div class="t"></div><div class="a"></div></div>'+(has?'<span class="inbadge">✓ כבר בתיקייה</span>':'');
+    r.querySelector('.t').textContent=s.title;r.querySelector('.a').textContent=s.artist||'';
+    r.onclick=()=>{if(has){haptic();toast('השיר כבר בתיקייה הזאת');return}pickSel.has(s.id)?pickSel.delete(s.id):pickSel.add(s.id);renderPick()};el.appendChild(r)});
+  if(!list.length)el.innerHTML='<div class="note">לא נמצא שיר בשם הזה.</div>';
   $('pickok').textContent='הוסף ('+pickSel.size+')';}
-$('pickok').onclick=()=>{songs.forEach(s=>{if(pickSel.has(s.id)){show.ids.push(s.id);s.mine=true}});$('picksheet').classList.remove('on');haptic();toast('נוספו '+pickSel.size+' שירים');renderShow()};
+$('pickok').onclick=()=>{let n=0;songs.forEach(s=>{if(pickSel.has(s.id)&&!show.ids.includes(s.id)){show.ids.push(s.id);s.mine=true;n++}});
+  $('picksheet').classList.remove('on');haptic();toast(n?'נוספו '+n+' שירים':'לא נבחרו שירים');renderShow()};
 /* from the song screen */
 $('tofolderbtn').onclick=()=>{if(!cur)return;$('tofoldertitle').textContent='הוסף את ״'+cur.title+'״';
   const el=$('tofolderlist');el.innerHTML='';
   folders.forEach(f=>{const r=document.createElement('div');r.className='folderrow glass';const has=f.ids.includes(cur.id);
     r.innerHTML=`<span class="fi">📁</span><div><div class="fn"></div><div class="fc">${f.ids.length} שירים${has?' · כבר כאן':''}</div></div><span style="margin-inline-start:auto;color:var(--cyan);font-weight:700">${has?'✓':'＋'}</span>`;
     r.querySelector('.fn').textContent=f.name;
-    r.onclick=()=>{if(!has){f.ids.push(cur.id);cur.mine=true}haptic();$('tofoldersheet').classList.remove('on');toast('נוסף לתיקייה '+f.name)};el.appendChild(r)});
+    r.onclick=()=>{haptic();if(has){toast('השיר כבר בתיקייה '+f.name);return}f.ids.push(cur.id);cur.mine=true;$('tofoldersheet').classList.remove('on');toast('נוסף לתיקייה '+f.name)};el.appendChild(r)});
   $('tofoldernew').value='';openSheet('tofoldersheet')};
 $('tofoldernewok').onclick=()=>{const f=createFolder($('tofoldernew').value.trim());f.ids.push(cur.id);cur.mine=true;$('tofoldersheet').classList.remove('on');haptic();toast('נוצרה תיקייה ״'+f.name+'״ והשיר נוסף')};
 
@@ -1353,10 +1368,10 @@ async function startStage(){
   leaveRole();role='stage';
   code=LS.get('cockpit.stagecode',null)||randCode();LS.set('cockpit.stagecode',code);
   stage=null;stopped=false;document.body.classList.add('stagemode');
-  renderQR();renderPill();buildStage();keepAwake();
+  renderQR();renderPill();buildStage();updateNebula();keepAwake();
   T=await openTransport('stage',code);
 }
-function leaveRole(){if(T){try{T.close()}catch(e){}}T=null;connected=false;peersCount=0;role=null;code=null}
+function leaveRole(){if(T){try{T.close()}catch(e){}}T=null;connected=false;peersCount=0;role=null;code=null;updateNebula()}
 /* stage: hold 2 seconds anywhere for the exit buttons */
 (function(){let t=null;const st=$('stage');
   st.addEventListener('pointerdown',()=>{if(role!=='stage')return;t=setTimeout(()=>$('stageexit').classList.add('on'),2000)});
@@ -1372,6 +1387,30 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)return;
   /* back from the lock screen / another app: rebuild the link if it died meanwhile */
   if(role==='remote'&&code&&!connected){const c=code;startRemote(c)}});
 window.addEventListener('online',()=>{if(role==='remote'&&code&&!connected){const c=code;startRemote(c)}});
+
+/* ---------- nebula: moving background while nothing is on air ---------- */
+const NEB={on:false,raf:0,t0:performance.now()};
+function nebulaFrame(n){
+  if(!NEB.on)return;const cv=$('neb'),x=cv.getContext('2d'),d=Math.min(2,devicePixelRatio||1);
+  const W=cv.clientWidth*d|0,H=cv.clientHeight*d|0;
+  if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H;x.fillStyle='#03020a';x.fillRect(0,0,W,H)}
+  const t=(n-NEB.t0)/1000;
+  x.globalCompositeOperation='source-over';x.fillStyle='rgba(3,2,10,.08)';x.fillRect(0,0,W,H);
+  x.globalCompositeOperation='lighter';
+  for(let i=0;i<5;i++){const px=W*(.5+.35*Math.sin(t*.13*(i+1)+i*2)),py=H*(.5+.3*Math.cos(t*.11*(i+1)+i)),R=Math.max(W,H)*(.25+.08*Math.sin(t*.3+i));
+    const g=x.createRadialGradient(px,py,0,px,py,R),h=[270,195,310,180,240][i];
+    g.addColorStop(0,'hsla('+h+',90%,55%,.05)');g.addColorStop(1,'hsla(0,0%,0%,0)');x.fillStyle=g;x.fillRect(0,0,W,H)}
+  x.globalCompositeOperation='source-over';
+  if(stopped){x.fillStyle='rgba(255,255,255,.55)';x.font='300 '+Math.round(H*.05)+'px Heebo,sans-serif';x.textAlign='center';x.textBaseline='middle';
+    x.fillText('C O C K P I T',W/2,H/2)}
+  NEB.raf=requestAnimationFrame(nebulaFrame);
+}
+function updateNebula(){
+  const want=role==='stage'&&!stage&&stageOn!==false;
+  $('neb').style.display=want?'block':'none';
+  if(want&&!NEB.on){NEB.on=true;NEB.raf=requestAnimationFrame(nebulaFrame)}
+  if(!want&&NEB.on){NEB.on=false;cancelAnimationFrame(NEB.raf)}
+}
 
 /* ---------- QR ---------- */
 renderQR=function(){
@@ -1489,13 +1528,14 @@ function applySt(){
     stage={song,base:+m.base||0,baseT:now(),speed:m.speed?+m.speed:null};
   }else stage=null;
   if(key!==shownKey){shownKey=key;_buildStage()}
+  updateNebula();
 }
 
 /* remote: every change that the stage must see goes out */
 const _syncStage=syncStage;
 syncStage=function(){if(isLive())stage={song:clone(cur),base:pos(),baseT:now(),speed:auto};broadcast(false)};
 const _buildStage=buildStage;
-buildStage=function(){_buildStage();broadcast(false)};
+buildStage=function(){_buildStage();updateNebula();broadcast(false)};
 $('golive').onclick=()=>{
   if(isLive()){haptic();liveId=null;stage=null;stopped=true;auto=null;buildStage();renderSong();toast('השידור הופסק · מסך הבמה שחור');return}
   haptic();liveId=cur.id;stopped=false;syncStage();buildStage();renderSong();toast(connected?'על הבמה: '+cur.title:'מוכן – יוצג כשמסך הבמה יתחבר');
